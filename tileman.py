@@ -73,17 +73,39 @@ BImat = new_BImat()
 show_mat = get_showable(BImat, 10, 10, 2)
 
 #Functions
-def tile_hero_interaction(block_x, block_y, tile, i, j, hero, BImat_i, BImat_j):
-	#tile identities must be between 100 and 999
+def tile_hero_interaction(tile, hero):
+	i, j = hero.vis_coords()
+	block_x, block_y = hero.block_coords()
+	BImat_i, BImat_j = hero.BImat_coords()
 	block_id = seed_mat[block_x][block_y]
 	pos = i * BLOCK_WIDTH + j
-	tile_id = (block_id//(100**pos))%1000
+	#tile_id for all tiles must be between 100 and 999
+	tile_id = (block_id // (100 ** pos) ) % 1000
 	new_tile_id = tile.interact(hero)
 	BImat[BImat_i][BImat_j] = new_tile_id
-	delta_id = new_tile_id - tile_id
-	seed_mat[block_x][block_y] += delta_id*(100**pos)
+	seed_mat[block_x][block_y] += (new_tile_id - tile_id) * (100 ** pos)
 
 #Classes
+class BaseTile:
+	def __init__(self,name,interact,source):
+		self.name = name
+		self.interact = interact
+		self.source = source
+class Tile:
+	def __init__(self, tile_id):
+		self.base = bases[tile_id]
+		self.name = self.base.name
+		self.interact = self.base.interact
+		self.source = self.base.source
+
+
+def become_dirt(hero):
+	return 105
+
+baseDirt = BaseTile("dirt", become_dirt, 1)
+baseGrass = BaseTile("grass", become_dirt, 2)
+bases = {105: baseDirt, 106: baseGrass}
+
 class tileman:
 	def __init__(self):
 		###Movement Variables###
@@ -92,7 +114,24 @@ class tileman:
 		#Up, Left, Down, Right
 		self.counts = [0,0,0,0]
 		#minY, minX, maxY, maxX
-		self.edges = [2,2,13,13]
+		self.edges = [-1,-1,16,16]
+
+	def vis_coords(self):
+		return (self.x, self.y)
+
+	def BImat_coords(self):
+		return (show_posx[0] + self.x, show_posy[0] + self.y)
+
+	def block_coords(self):
+		# 0 <= block_coord x < BLOCK_WIDTH,
+		# 0 <= block_coord y < BLOCK_WIDTH,
+		BI_x, BI_y = self.BImat_coords()
+		return ((BI_x - BI_x%BLOCK_WIDTH)//BLOCK_WIDTH) - 1, ((BI_y - BI_y%BLOCK_WIDTH)//BLOCK_WIDTH) - 1
+
+	def print_coords(self):
+		print("Visible Coords",self.vis_coords())
+		print("Big IMat Coords",self.BImat_coords())
+		print("Block Coords",self.block_coords())
 
 	def move(self, direction):
 		global BImat
@@ -132,6 +171,7 @@ class tileman:
 				direction = max(delX, delY, key = lambda a: abs(a))
 				show_range[i] += BLOCK_WIDTH * direction
 			BImat = new_BImat()
+		self.print_coords()
 		show_mat = get_showable(BImat, self.x, self.y, count_ind)
 			
 
@@ -174,6 +214,7 @@ game_loop(hero)
 '''
 Feature Ideas
 -tile objects: tentative tile philosophy => tile objects are immutable, but user interaction can change which class of tiles, a square belongs to; a tree tile can become a stump tile, and the tile id # will change as well. all tile attributes will be unchanging because the tile as a whole should be unchanging. a tile interaction should take in a tile, the player, and return a new tile identity; eg fresh grass => stomped grass | how will changed tiles be saved?
+-coordinate system
 -block patterns
 -refactoring
 -game objective
