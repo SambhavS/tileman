@@ -5,7 +5,6 @@ Table of Contents
 -Tools [block/blockmatrix tools]
 -Game Logic [initializations, function defs, obj classes]
 -Main Calls [function defs & calls]
-
 '''
 #####Imports#####
 from draw import draw_mat
@@ -23,7 +22,7 @@ BLOCK_WIDTH = 4
 init()
 width, height = 480, 480
 size = (width, height)
-back_col = (70, 200, 160)
+back_col = (30, 180, 160)
 square_width = 30
 tiles_wide = width // square_width
 tiles_high = height // square_width
@@ -32,21 +31,36 @@ square_size = (square_width, square_width)
 screen = display.set_mode(size)
 #Populate sources
 sources = {}
-ordered_filenames = ["heroU.png","heroL.png","heroD.png","heroR.png","green.png","tree.png"]
-for i, filename in enumerate(ordered_filenames):
-	sources[i] = pytr.scale(pyim.load(filename), square_size)
+filenames_codes = [	("heroU.png", 0),
+					("heroL.png", 1),
+					("heroD.png", 2),
+					("heroR.png", 3),
+					("green.png", 111),
+					("stepped.png", 888),
+					("tree.png" ,222)	]
+for filename, code in filenames_codes:
+	sources[code] = pytr.scale(pyim.load(filename), square_size)
+
 
 ######Tools######
-## Block & Block matrix tools
+## Block & block matrix tools
 def random_seed_fill(a, b):
-	return fill2Dmat(a, b, lambda x, y: random.randrange(500000))
-def empty_block():
-	return empty_mat(BLOCK_WIDTH, BLOCK_WIDTH)
-def empty_block_mat():
-	return fill2Dmat(SHOW_BLOCKS + 2, SHOW_BLOCKS + 2, lambda x, y: empty_block())
-def rand_block(rand_obj):
-	#VOLATILE RANDOMNESS (check rand_mat)
-	return rand_mat(BLOCK_WIDTH, BLOCK_WIDTH, rand_obj)
+	master_random = random.Random(7256412)
+	def create_allowable_int(size, allowable, rand_obj):
+		number = 0
+		for i in range(size):
+			number *= 1000
+			number += rand_obj.choice(allowable)
+		return number
+	return fill2Dmat(a, b, lambda x, y: create_allowable_int(BLOCK_WIDTH**2, [111,111,111,222], master_random))
+
+def extract_num(i,j,block_id):
+	pos = i * BLOCK_WIDTH + j
+	return (block_id // (1000 ** pos) ) % 1000
+
+def make_block(block_id):
+	return fill2Dmat(BLOCK_WIDTH,BLOCK_WIDTH, lambda x,y: extract_num(x,y,block_id))
+
 def to_BImat(block_mat):
 	imat = [[] for i in range(len(block_mat[0]) * len(block_mat[0][0]))]
 	for i, blockrow in enumerate(block_mat):
@@ -54,70 +68,100 @@ def to_BImat(block_mat):
 			for k, row in enumerate(block):
 				imat[i * len(block) + k] += row
 	return imat
+
 def get_showable(BImat, x, y, appearance):
 	submatrix = submat(show_posy[0],show_posy[1],show_posx[0],show_posx[1],BImat)
 	submatrix[y][x] = appearance
 	return submatrix
+
 def new_BImat():
-	block_mat = gen_mat(y_range[0], y_range[1], x_range[0], x_range[1], seed_mat, lambda a, b, i0, i1, j0, j1, seed_mat: rand_block(seed_mat[a][b]))
+	block_mat = gen_mat(y_range[0], y_range[1], x_range[0], x_range[1], seed_mat, lambda a, b, i0, i1, j0, j1, seed_mat: make_block(seed_mat[a][b]))
 	return to_BImat(block_mat)
 
 #####Game Logic#####
 #Initializations
-seed_mat = random_seed_fill(500, 500)
+seed_mat = random_seed_fill(80, 80)
 y_range = [0, 6]
 x_range = [0, 6]
 show_posy = [4, 20]
 show_posx = [4, 20]
 BImat = new_BImat()
-show_mat = get_showable(BImat, 10, 10, 2)
+show_mat = get_showable(BImat, 8, 8, 2)
 
-#Functions
+#General Functions
+def print_block(block, isNum=False):
+	if isNum:
+		block = make_block(block)
+	print("BLOCK")
+	for row in block:
+		print(row)
+	print()
+
+def compress_block(block):
+	x=[]
+	for row in block:
+		for i in row:
+			x.append(str(i))
+	x.reverse()
+	return int(''.join(x))
+
+def change_num(i,j,delta,num):
+	block = make_block(num)
+	block[i][j] += delta
+	return compress_block(block)
+
 def tile_hero_interaction(tile, hero):
-	i, j = hero.vis_coords()
-	block_x, block_y = hero.block_coords()
+	i, j = hero.in_block_coords() #i & j denote where in a block the hero is
+	seed_x, seed_y = hero.seed_coords()
 	BImat_i, BImat_j = hero.BImat_coords()
-	block_id = seed_mat[block_x][block_y]
-	pos = i * BLOCK_WIDTH + j
-	#tile_id for all tiles must be between 100 and 999
-	tile_id = (block_id // (100 ** pos) ) % 1000
+
+	#gets the new tile id
+	block_id = seed_mat[seed_y][seed_x]
+	pos = j * BLOCK_WIDTH + i
+	tile_id = extract_num(j,i,block_id)
+	print(tile.name)
 	new_tile_id = tile.interact(hero)
-	BImat[BImat_i][BImat_j] = new_tile_id
-	seed_mat[block_x][block_y] += (new_tile_id - tile_id) * (100 ** pos)
+	print(new_tile_id)
+	#update tile on BImat
+	BImat[BImat_j][BImat_i] = new_tile_id 	
+
+	#update seed matrix with new tile
+	delta = new_tile_id - tile_id
+	current_long = seed_mat[seed_y][seed_x]
+	seed_mat[seed_y][seed_x] = change_num(j, i, delta, current_long)
 
 #Classes
 class BaseTile:
-	def __init__(self,name,interact,source):
+	def __init__(self, name, interact, source, stop):
 		self.name = name
 		self.interact = interact
 		self.source = source
+		self.stop = stop
+
 class Tile:
 	def __init__(self, tile_id):
 		self.base = bases[tile_id]
 		self.name = self.base.name
 		self.interact = self.base.interact
 		self.source = self.base.source
+		self.stop = self.base.stop
 
-
-def become_dirt(hero):
-	return 105
-
-baseDirt = BaseTile("dirt", become_dirt, 1)
-baseGrass = BaseTile("grass", become_dirt, 2)
-bases = {105: baseDirt, 106: baseGrass}
-
-class tileman:
+class Explorer:
 	def __init__(self):
 		###Movement Variables###
-		self.x = 10
-		self.y = 10
+		self.x = 8
+		self.y = 8
 		#Up, Left, Down, Right
 		self.counts = [0,0,0,0]
 		#minY, minX, maxY, maxX
-		self.edges = [-1,-1,16,16]
+		self.edges = [3,3,12,12]
 
 	def vis_coords(self):
 		return (self.x, self.y)
+
+	def in_block_coords(self):
+		BI_x, BI_y = self.BImat_coords()
+		return (BI_x%BLOCK_WIDTH, BI_y%BLOCK_WIDTH)
 
 	def BImat_coords(self):
 		return (show_posx[0] + self.x, show_posy[0] + self.y)
@@ -128,24 +172,45 @@ class tileman:
 		BI_x, BI_y = self.BImat_coords()
 		return ((BI_x - BI_x%BLOCK_WIDTH)//BLOCK_WIDTH) - 1, ((BI_y - BI_y%BLOCK_WIDTH)//BLOCK_WIDTH) - 1
 
+	def seed_coords(self):
+		block_x, block_y = self.block_coords()
+		return x_range[0] + block_x + 1, y_range[0] + block_y + 1
+
 	def print_coords(self):
 		print("Visible Coords",self.vis_coords())
 		print("Big IMat Coords",self.BImat_coords())
 		print("Block Coords",self.block_coords())
 
-	def move(self, direction):
+	def attempt_move(self, direction):
+		global show_mat
+		if direction == "u":
+			delX, delY = 0, 1
+		elif direction == "l":
+			delX, delY = 1, 0,
+		elif direction == "d":
+			delX, delY = 0, -1
+		elif direction == "r":
+			delX, delY = -1, 0
+		player_x, player_y = self.BImat_coords()
+		next_tile_x = player_x + delX
+		next_tile_y = player_y + delY
+		next_tile = Tile(BImat[next_tile_x][next_tile_y])
+		tile_hero_interaction(next_tile, self)
+		if not next_tile.stop:
+			self.move(direction, delX, delY)
+
+	def move(self, direction, delX, delY):
 		global BImat
 		global show_mat
-
 		direction = direction.lower()
 		if direction == "u":
-			delX, delY, count_ind, show_range, block_range = 0,  1, 0, show_posy, y_range
+			count_ind, show_range, block_range = 0, show_posy, y_range
 		elif direction == "l":
-			delX, delY, count_ind, show_range, block_range = 1, 0, 1, show_posx, x_range
+			count_ind, show_range, block_range = 1, show_posx, x_range
 		elif direction == "d":
-			delX, delY, count_ind, show_range, block_range = 0, -1, 2, show_posy, y_range
+			count_ind, show_range, block_range = 2, show_posy, y_range
 		elif direction == "r":
-			delX, delY, count_ind, show_range, block_range = -1,  0, 3, show_posx, x_range
+			count_ind, show_range, block_range = 3, show_posx, x_range
 		edge_coord = self.edges[count_ind]
 
 		self.y -= delY
@@ -165,13 +230,13 @@ class tileman:
 		if(self.counts[count_ind] == BLOCK_WIDTH):
 			self.counts[count_ind] = 0
 			for i in range(len(block_range)):
-				y_range[i] -= delY
-				x_range[i] -= delX
+				y_range[i] = (y_range[i] - delY) 
+				x_range[i] = (x_range[i] - delX)
 			for i in range(len(show_range)):
 				direction = max(delX, delY, key = lambda a: abs(a))
 				show_range[i] += BLOCK_WIDTH * direction
 			BImat = new_BImat()
-		self.print_coords()
+		#self.print_coords()
 		show_mat = get_showable(BImat, self.x, self.y, count_ind)
 			
 
@@ -183,13 +248,13 @@ def key_manager(keys, move_ticker, hero):
 	else:
 		move_ticker = 7
 		if keys[K_LEFT]:
-			hero.move('l')
+			hero.attempt_move('l')
 		elif keys[K_RIGHT]:
-			hero.move('r')
+			hero.attempt_move('r')
 		elif keys[K_UP]:
-			hero.move('u')
+			hero.attempt_move('u')
 		elif keys[K_DOWN]:
-			hero.move('d')
+			hero.attempt_move('d')
 		else:
 			move_ticker = 0
 	return move_ticker
@@ -207,9 +272,23 @@ def game_loop(hero):
 		display.flip()
 		k+=1
 
+#Playground
+def become_tree(hero):
+	print("A")
+	return 222
+def become_stomped_grass(hero):
+	print("B")
+	return 888
+
+baseFreshGrass = BaseTile("fresh grass", become_stomped_grass, 111, False)
+baseTree = BaseTile("tree", become_stomped_grass, 222, False)
+baseStompedGrass = BaseTile("stomped grass", become_stomped_grass, 888, False)
+bases = {111: baseFreshGrass, 222: baseTree, 888: baseStompedGrass}
+
 #Calls
-hero = tileman()
+hero = Explorer()
 game_loop(hero)
+
 
 '''
 Feature Ideas
@@ -217,6 +296,7 @@ Feature Ideas
 -coordinate system
 -block patterns
 -refactoring
+-wrap around map
 -game objective
 -external rooms
 
