@@ -1,11 +1,12 @@
 '''
-Table of Contents
+Code Org:
 -Imports
 -Pygame Setup [initializations & population sourcing]
 -Tools [block/blockmatrix tools]
 -Game Logic [initializations, function defs, obj classes]
 -Main Calls [function defs & calls]
 '''
+
 #####Imports#####
 from draw import draw_mat
 from matrix_tools import *
@@ -19,15 +20,16 @@ import random
 #Initializations
 SHOW_BLOCKS = 4
 BLOCK_WIDTH = 4
-init()
+MASTER_SEED = 7256412
 width, height = 480, 480
 size = (width, height)
-back_col = (30, 180, 160)
+back_col = (29, 180, 149)
 square_width = 30
 tiles_wide = width // square_width
 tiles_high = height // square_width
 dimensions = [tiles_wide, tiles_high]
 square_size = (square_width, square_width)
+init()
 screen = display.set_mode(size)
 #Populate sources
 sources = {}
@@ -45,7 +47,7 @@ for filename, code in filenames_codes:
 ######Tools######
 ## Block & block matrix tools
 def random_seed_fill(a, b):
-	master_random = random.Random(7256412)
+	master_random = random.Random(MASTER_SEED)
 	def create_allowable_int(size, allowable, rand_obj):
 		number = 0
 		for i in range(size):
@@ -60,6 +62,22 @@ def extract_num(i,j,block_id):
 
 def make_block(block_id):
 	return fill2Dmat(BLOCK_WIDTH,BLOCK_WIDTH, lambda x,y: extract_num(x,y,block_id))
+
+def print_block(block, isNum=False):
+	if isNum:
+		block = make_block(block)
+	print("BLOCK")
+	for row in block:
+		print(row)
+	print()
+
+def compress_block(block):
+	x=[]
+	for row in block:
+		for i in row:
+			x.append(str(i))
+	x.reverse()
+	return int(''.join(x))
 
 def to_BImat(block_mat):
 	imat = [[] for i in range(len(block_mat[0]) * len(block_mat[0][0]))]
@@ -89,22 +107,6 @@ BImat = new_BImat()
 show_mat = get_showable(BImat, 8, 8, 2)
 
 #General Functions
-def print_block(block, isNum=False):
-	if isNum:
-		block = make_block(block)
-	print("BLOCK")
-	for row in block:
-		print(row)
-	print()
-
-def compress_block(block):
-	x=[]
-	for row in block:
-		for i in row:
-			x.append(str(i))
-	x.reverse()
-	return int(''.join(x))
-
 def change_num(i,j,delta,num):
 	block = make_block(num)
 	block[i][j] += delta
@@ -113,23 +115,21 @@ def change_num(i,j,delta,num):
 def tile_hero_interaction(tile, hero):
 	i, j = hero.in_block_coords() #i & j denote where in a block the hero is
 	seed_x, seed_y = hero.seed_coords()
-	BImat_i, BImat_j = hero.BImat_coords()
-
+	
 	#gets the new tile id
 	block_id = seed_mat[seed_y][seed_x]
 	pos = j * BLOCK_WIDTH + i
 	tile_id = extract_num(j,i,block_id)
-	print(tile.name)
 	new_tile_id = tile.interact(hero)
-	print(new_tile_id)
-	#update tile on BImat
-	BImat[BImat_j][BImat_i] = new_tile_id 	
+	block_id = seed_mat[seed_y][seed_x]
+	
 
 	#update seed matrix with new tile
 	delta = new_tile_id - tile_id
 	current_long = seed_mat[seed_y][seed_x]
 	seed_mat[seed_y][seed_x] = change_num(j, i, delta, current_long)
-
+	return new_tile_id
+	
 #Classes
 class BaseTile:
 	def __init__(self, name, interact, source, stop):
@@ -170,7 +170,7 @@ class Explorer:
 		# 0 <= block_coord x < BLOCK_WIDTH,
 		# 0 <= block_coord y < BLOCK_WIDTH,
 		BI_x, BI_y = self.BImat_coords()
-		return ((BI_x - BI_x%BLOCK_WIDTH)//BLOCK_WIDTH) - 1, ((BI_y - BI_y%BLOCK_WIDTH)//BLOCK_WIDTH) - 1
+		return ((BI_x - BI_x % BLOCK_WIDTH) // BLOCK_WIDTH) - 1, ((BI_y - BI_y % BLOCK_WIDTH) // BLOCK_WIDTH) - 1
 
 	def seed_coords(self):
 		block_x, block_y = self.block_coords()
@@ -192,12 +192,16 @@ class Explorer:
 		elif direction == "r":
 			delX, delY = -1, 0
 		player_x, player_y = self.BImat_coords()
-		next_tile_x = player_x + delX
-		next_tile_y = player_y + delY
-		next_tile = Tile(BImat[next_tile_x][next_tile_y])
-		tile_hero_interaction(next_tile, self)
+		next_tile_x = player_x - delX
+		next_tile_y = player_y - delY
+		next_tile = Tile(BImat[next_tile_y][next_tile_x])
+		 
 		if not next_tile.stop:
 			self.move(direction, delX, delY)
+			new_tile_code = tile_hero_interaction(next_tile, self)
+			tile_x, tile_y = self.BImat_coords()
+			BImat[tile_y][tile_x] = new_tile_code
+		
 
 	def move(self, direction, delX, delY):
 		global BImat
@@ -272,16 +276,14 @@ def game_loop(hero):
 		display.flip()
 		k+=1
 
-#Playground
+#Base Tile Stuff
 def become_tree(hero):
-	print("A")
 	return 222
 def become_stomped_grass(hero):
-	print("B")
 	return 888
 
 baseFreshGrass = BaseTile("fresh grass", become_stomped_grass, 111, False)
-baseTree = BaseTile("tree", become_stomped_grass, 222, False)
+baseTree = BaseTile("tree", become_tree, 222, True)
 baseStompedGrass = BaseTile("stomped grass", become_stomped_grass, 888, False)
 bases = {111: baseFreshGrass, 222: baseTree, 888: baseStompedGrass}
 
@@ -292,8 +294,6 @@ game_loop(hero)
 
 '''
 Feature Ideas
--tile objects: tentative tile philosophy => tile objects are immutable, but user interaction can change which class of tiles, a square belongs to; a tree tile can become a stump tile, and the tile id # will change as well. all tile attributes will be unchanging because the tile as a whole should be unchanging. a tile interaction should take in a tile, the player, and return a new tile identity; eg fresh grass => stomped grass | how will changed tiles be saved?
--coordinate system
 -block patterns
 -refactoring
 -wrap around map
@@ -311,9 +311,4 @@ Feature Ideas
 
 
 
-
-Project Ideas
--image cropper
--snake
 '''
-
