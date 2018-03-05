@@ -1,3 +1,8 @@
+import pygame.transform as pytr
+import pygame.image as pyim
+import pygame.font as pyfont
+
+
 #Renders integer matrix
 def draw_mat(int_mat, sources, screen, back_col, square_width):
 
@@ -24,3 +29,22 @@ def draw_mat(int_mat, sources, screen, back_col, square_width):
 	for row in tile_mat:
 		for source, obj in row:
 			screen.blit(source, obj)
+
+def draw_output(screen, messages, font_obj):
+	#White Background
+	source = pytr.scale(pyim.load("white.png"), (480, 120))
+	screen.blit(source, source.get_rect().move(0, 480))
+	#Text rendering
+	for i in range(min(5, len(messages))):
+		textsurface = font_obj.render(str(messages[::-1][i]), True, (0, 0, 0))
+		screen.blit(textsurface,(10, 490 + i * 17))
+
+def draw_input(screen, text, execute_and_clear, font_obj):
+	source = pytr.scale(pyim.load("offwhite.png"), (480, 30))
+	screen.blit(source, source.get_rect().move(0, 600))
+	if execute_and_clear:
+		print(text)
+		text = ""
+	#Text rendering
+	textsurface = font_obj.render(str(text), True, (20, 20, 20))
+	screen.blit(textsurface,(0, 605))

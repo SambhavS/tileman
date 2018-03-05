@@ -8,28 +8,36 @@ Code Org:
 '''
 
 #####Imports#####
-from draw import draw_mat
+from draw import draw_mat, draw_input, draw_output
 from matrix_tools import *
 import sys
 from pygame import *
 import pygame.transform as pytr
 import pygame.image as pyim
 import random
+import pygame.font as pyfont
 
 #####Pygame Setup######
 #Initializations
 SHOW_BLOCKS = 4
 BLOCK_WIDTH = 4
 MASTER_SEED = 7256412
-width, height = 480, 480
+width, height = 480, 630
 size = (width, height)
-back_col = (29, 180, 149)
+back_col = (0, 212, 157)
 square_width = 30
 tiles_wide = width // square_width
 tiles_high = height // square_width
 dimensions = [tiles_wide, tiles_high]
 square_size = (square_width, square_width)
+messages = []
+alpha_num_keys = [K_a, K_b, K_c, K_d, K_e, K_f, K_g, K_h, K_i, K_j, K_k, K_l, K_m, K_n, K_o,K_p, K_q, K_r, K_s, K_t, K_u, K_v, K_w, K_x, K_y, K_z, K_0, K_1, K_2, K_3, K_4, K_5, K_6, K_7, K_8, K_9, K_BACKSPACE, K_RETURN, K_SPACE]
+alpha_num_chars = "abcdefghijklmnopqrstuvwxyz0123456789B! "
+user_input = ""
+execute_and_clear = False
 init()
+pyfont.init()
+opensans_font = pyfont.Font("Open_Sans/OpenSans-SemiBold.ttf", 13)
 screen = display.set_mode(size)
 #Populate sources
 sources = {}
@@ -37,9 +45,10 @@ filenames_codes = [	("heroU.png", 0),
 					("heroL.png", 1),
 					("heroD.png", 2),
 					("heroR.png", 3),
-					("green.png", 111),
-					("stepped.png", 888),
-					("tree.png" ,222)	]
+					("green.png", 888),
+					("tree.png", 222),
+					("coin.png", 777),
+					("mush.png", 555)	]
 for filename, code in filenames_codes:
 	sources[code] = pytr.scale(pyim.load(filename), square_size)
 
@@ -47,14 +56,19 @@ for filename, code in filenames_codes:
 ######Tools######
 ## Block & block matrix tools
 def random_seed_fill(a, b):
+	choices = [888, 222, 777, 555]
+	weights = [200000, 50000, 10000, 10]
 	master_random = random.Random(MASTER_SEED)
-	def create_allowable_int(size, allowable, rand_obj):
+	allowable = []
+	for i, w in enumerate(weights):
+		allowable += [choices[i]] * w
+	def create_allowable_int(size, rand_obj):
 		number = 0
 		for i in range(size):
 			number *= 1000
 			number += rand_obj.choice(allowable)
 		return number
-	return fill2Dmat(a, b, lambda x, y: create_allowable_int(BLOCK_WIDTH**2, [111,111,111,222], master_random))
+	return fill2Dmat(a, b, lambda x, y: create_allowable_int(BLOCK_WIDTH**2, master_random))
 
 def extract_num(i,j,block_id):
 	pos = i * BLOCK_WIDTH + j
@@ -132,11 +146,20 @@ def tile_hero_interaction(tile, hero):
 	
 #Classes
 class BaseTile:
-	def __init__(self, name, interact, source, stop):
+	def __init__(self, name, source, interact, stop):
 		self.name = name
-		self.interact = interact
 		self.source = source
+		self.interact = interact
 		self.stop = stop
+
+class StopBase(BaseTile):
+	def __init__(self, name, source, interact):
+		super().__init__(name, source, interact, True)
+
+class StepBase(BaseTile):
+	def __init__(self, name, source, interact):
+		super().__init__(name, source, interact, False)
+		
 
 class Tile:
 	def __init__(self, tile_id):
@@ -146,8 +169,33 @@ class Tile:
 		self.source = self.base.source
 		self.stop = self.base.stop
 
+#Base Tile Stuff
+def do_nothing(hero):
+	return
+def grass_action(hero):
+	return 888
+def coin_action(hero):
+	global messages
+	hero.coins += 1
+	messages.append("Coins: "+str(hero.coins))
+	return grass_action(hero)
+def mushroom_action(hero):
+	global messages
+	hero.mushrooms += 1
+	messages.append("You collected a rare mushroom! Rare mushrooms: "+str(hero.mushrooms))
+	return grass_action(hero)
+
+baseCoin = StepBase("coin", 777, coin_action)
+baseShroom = StepBase("mushroom", 555, mushroom_action)
+baseTree = StopBase("tree", 222, do_nothing)
+baseGrass = StepBase("grass", 888, grass_action)
+bases = {222: baseTree, 888: baseGrass, 777: baseCoin, 555: baseShroom}
+
+
 class Explorer:
 	def __init__(self):
+		self.coins = 0
+		self.mushrooms = 0
 		###Movement Variables###
 		self.x = 8
 		self.y = 8
@@ -181,6 +229,16 @@ class Explorer:
 		print("Big IMat Coords",self.BImat_coords())
 		print("Block Coords",self.block_coords())
 
+	def around_actions(self):
+		x, y = self.BImat_coords()
+		around = (	(x+1,y+1),(x,y+1),(x-1,y+1),
+					(x+1,y),          (x-1,y),
+					(x+1,y-1),(x,y-1),(x-1,y-1),)
+		for x0, y0 in around:
+			outer_tile = bases[BImat[y0][x0]]
+			if outer_tile.stop:
+				outer_tile.interact(hero)
+
 	def attempt_move(self, direction):
 		global show_mat
 		if direction == "u":
@@ -201,6 +259,7 @@ class Explorer:
 			new_tile_code = tile_hero_interaction(next_tile, self)
 			tile_x, tile_y = self.BImat_coords()
 			BImat[tile_y][tile_x] = new_tile_code
+		self.around_actions()
 		
 
 	def move(self, direction, delX, delY):
@@ -246,7 +305,8 @@ class Explorer:
 
 #####Main#####
 #Function Definitions
-def key_manager(keys, move_ticker, hero):
+def move_key_manager(keys, move_ticker, hero):
+	#Hero Movement
 	if move_ticker:
 		move_ticker -= 1
 	else:
@@ -263,34 +323,59 @@ def key_manager(keys, move_ticker, hero):
 			move_ticker = 0
 	return move_ticker
 
+def user_key_manager(keys, last_key, hero):
+	global user_input
+	global execute_and_clear
+	untouched = True
+	#User Input
+	for i, key in enumerate(alpha_num_keys):
+		if keys[key]:
+			untouched = False
+			char_key = alpha_num_chars[i]
+			if char_key != last_key:
+				last_key = char_key
+				if char_key == "!":
+					execute_and_clear = True
+				elif char_key == "B":
+					if keys[K_LSHIFT] or keys[K_RSHIFT]:
+						user_input = ""
+					user_input = user_input[:len(user_input) - 1]
+				else:
+					user_input += char_key
+			break
+	if untouched:
+		last_key = ""
+	return last_key
+
+def input_manager():
+	global execute_and_clear
+	global user_input
+	draw_input(screen, user_input, execute_and_clear, opensans_font)
+	if execute_and_clear:
+		user_input = ""
+		execute_and_clear = False
+	
 def game_loop(hero):
 	k = 0
 	move_ticker = 0
+	last_key = ""
+	matches = 0
 	while True:
+		draw_mat(show_mat, sources, screen, back_col, square_width)
+		draw_output(screen, messages, opensans_font)
 		for e in event.get():
 			if e.type == QUIT:
 				sys.exit()
 		if k:	
-			move_ticker = key_manager(key.get_pressed(), move_ticker, hero)
-		draw_mat(show_mat, sources, screen, back_col, square_width)
+			move_ticker = move_key_manager(key.get_pressed(), move_ticker, hero)
+			last_key = user_key_manager(key.get_pressed(), last_key, hero)
+		input_manager()
 		display.flip()
 		k+=1
-
-#Base Tile Stuff
-def become_tree(hero):
-	return 222
-def become_stomped_grass(hero):
-	return 888
-
-baseFreshGrass = BaseTile("fresh grass", become_stomped_grass, 111, False)
-baseTree = BaseTile("tree", become_tree, 222, True)
-baseStompedGrass = BaseTile("stomped grass", become_stomped_grass, 888, False)
-bases = {111: baseFreshGrass, 222: baseTree, 888: baseStompedGrass}
 
 #Calls
 hero = Explorer()
 game_loop(hero)
-
 
 '''
 Feature Ideas
@@ -299,8 +384,8 @@ Feature Ideas
 -wrap around map
 -game objective
 -external rooms
-
-
+-external communication/control (keyboard based)
+-add interactive stops
 
 
 
