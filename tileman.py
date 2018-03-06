@@ -19,9 +19,11 @@ import pygame.font as pyfont
 
 #####Pygame Setup######
 #Initializations
+#Map & Movement
 SHOW_BLOCKS = 4
 BLOCK_WIDTH = 4
 MASTER_SEED = 7256412
+paused = False
 width, height = 480, 630
 size = (width, height)
 back_col = (0, 212, 157)
@@ -29,15 +31,21 @@ square_width = 30
 tiles_wide = width // square_width
 tiles_high = height // square_width
 dimensions = [tiles_wide, tiles_high]
+#Text Input/Output
 square_size = (square_width, square_width)
 messages = []
-alpha_num_keys = [K_a, K_b, K_c, K_d, K_e, K_f, K_g, K_h, K_i, K_j, K_k, K_l, K_m, K_n, K_o,K_p, K_q, K_r, K_s, K_t, K_u, K_v, K_w, K_x, K_y, K_z, K_0, K_1, K_2, K_3, K_4, K_5, K_6, K_7, K_8, K_9, K_BACKSPACE, K_RETURN, K_SPACE]
+alpha_num_keys = 	[K_a, K_b, K_c, K_d, K_e, K_f, K_g, K_h, K_i, K_j, 
+					K_k, K_l, K_m, K_n, K_o,K_p, K_q, K_r, K_s, K_t, 
+					K_u, K_v, K_w, K_x, K_y, K_z, K_0, K_1, K_2, K_3,
+					K_4, K_5, K_6, K_7, K_8, K_9, 
+					K_BACKSPACE, K_RETURN,K_SPACE]
 alpha_num_chars = "abcdefghijklmnopqrstuvwxyz0123456789B! "
+special_handler = None
 user_input = ""
 execute_and_clear = False
 init()
 pyfont.init()
-opensans_font = pyfont.Font("Open_Sans/OpenSans-SemiBold.ttf", 13)
+opensans_font = pyfont.Font("Open_Sans/OpenSans-SemiBold.ttf", 11)
 screen = display.set_mode(size)
 #Populate sources
 sources = {}
@@ -48,7 +56,10 @@ filenames_codes = [	("heroU.png", 0),
 					("green.png", 888),
 					("tree.png", 222),
 					("coin.png", 777),
-					("mush.png", 555)	]
+					("mush.png", 555),
+					("bud.png", 102),
+					("stepped.png", 801)	
+					]
 for filename, code in filenames_codes:
 	sources[code] = pytr.scale(pyim.load(filename), square_size)
 
@@ -56,8 +67,8 @@ for filename, code in filenames_codes:
 ######Tools######
 ## Block & block matrix tools
 def random_seed_fill(a, b):
-	choices = [888, 222, 777, 555]
-	weights = [200000, 50000, 10000, 10]
+	choices = [888, 801, 222, 777, 555]
+	weights = [200000, 50000, 40000, 2000, 10]
 	master_random = random.Random(MASTER_SEED)
 	allowable = []
 	for i, w in enumerate(weights):
@@ -70,6 +81,17 @@ def random_seed_fill(a, b):
 		return number
 	return fill2Dmat(a, b, lambda x, y: create_allowable_int(BLOCK_WIDTH**2, master_random))
 
+def tree_border(tree_id):
+	for i in range(len(seed_mat)):
+		for j in range(len(seed_mat[0])):
+			if i==0 or j==0 or (i == len(seed_mat) - 1) or (j == len(seed_mat[0]) - 1):
+				seed_mat[i][j] = int(str(tree_id) * (BLOCK_WIDTH **2))
+def add_village():
+	block = [	[888,888,888,888],
+				[888,777,777,888],
+				[888,777,777,888],
+				[102,888,888,888]]
+	seed_mat[99][99] = compress_block(block)
 def extract_num(i,j,block_id):
 	pos = i * BLOCK_WIDTH + j
 	return (block_id // (1000 ** pos) ) % 1000
@@ -112,9 +134,11 @@ def new_BImat():
 
 #####Game Logic#####
 #Initializations
-seed_mat = random_seed_fill(80, 80)
-y_range = [0, 6]
-x_range = [0, 6]
+seed_mat = random_seed_fill(200, 200)
+tree_border(222)
+add_village()
+y_range = [100, 106]
+x_range = [100, 106]
 show_posy = [4, 20]
 show_posx = [4, 20]
 BImat = new_BImat()
@@ -170,15 +194,51 @@ class Tile:
 		self.stop = self.base.stop
 
 #Base Tile Stuff
+#StopTile Interactions
+def special_interaction(prompt, handler):
+	global paused 
+	global special_handler
+	paused = True
+	messages.append(prompt)
+	special_handler = handler
+
+def buds_shop(hero):
+	def custom_handler(user_input):
+		if(user_input=="y"):
+			if(hero.niceShoes):
+				messages.append("'Looks like you already have some. Nice!'")
+			elif(hero.coins>=10):
+				messages.append("'Awesome! This will protect you from poison oak.'")
+				hero.coins -= 10
+				hero.niceShoes = True
+			else:
+				messages.append("'You don't have enough coins?! I'm not running a charity boy! Scram!!'")
+		else:
+			messages.append("'Okay, maybe another time bro.'")
+		messages.pop(len(messages)-2)
+	special_interaction("'Hey my name's Bud. Want to buy some nice shoes? Just 10 coins! (y / n)'", custom_handler)
+
 def do_nothing(hero):
 	return
+
+#StepTile Interactions
 def grass_action(hero):
 	return 888
+def poison_oak_action(hero):
+	if not hero.niceShoes:
+		hero.health -= 5
+		if hero.health > 0:
+			messages.append("Oh no! Poison oak! HP: "+str(hero.health))
+		else:
+			hero.health = 100
+			hero.coins = 0
+			messages.append("You ran out of health! A merciful spirit restores your health but steals your coins!")
+	return 801
 def coin_action(hero):
 	global messages
 	hero.coins += 1
-	messages.append("Coins: "+str(hero.coins))
 	return grass_action(hero)
+
 def mushroom_action(hero):
 	global messages
 	hero.mushrooms += 1
@@ -189,13 +249,24 @@ baseCoin = StepBase("coin", 777, coin_action)
 baseShroom = StepBase("mushroom", 555, mushroom_action)
 baseTree = StopBase("tree", 222, do_nothing)
 baseGrass = StepBase("grass", 888, grass_action)
-bases = {222: baseTree, 888: baseGrass, 777: baseCoin, 555: baseShroom}
+basePoisOak = StepBase("poison oak", 801, poison_oak_action)
+baseBud = StopBase("Bud", 102, buds_shop)
+bases = {	222: baseTree, 
+			888: baseGrass, 
+			777: baseCoin, 
+			555: baseShroom,
+			102: baseBud,
+			801: basePoisOak
+		}
 
 
 class Explorer:
 	def __init__(self):
 		self.coins = 0
 		self.mushrooms = 0
+		self.apples = 0
+		self.niceShoes = False
+		self.health = 100
 		###Movement Variables###
 		self.x = 8
 		self.y = 8
@@ -231,9 +302,7 @@ class Explorer:
 
 	def around_actions(self):
 		x, y = self.BImat_coords()
-		around = (	(x+1,y+1),(x,y+1),(x-1,y+1),
-					(x+1,y),          (x-1,y),
-					(x+1,y-1),(x,y-1),(x-1,y-1),)
+		around = ((x,y+1), (x+1,y), (x-1,y), (x,y-1))
 		for x0, y0 in around:
 			outer_tile = bases[BImat[y0][x0]]
 			if outer_tile.stop:
@@ -241,25 +310,27 @@ class Explorer:
 
 	def attempt_move(self, direction):
 		global show_mat
-		if direction == "u":
-			delX, delY = 0, 1
-		elif direction == "l":
-			delX, delY = 1, 0,
-		elif direction == "d":
-			delX, delY = 0, -1
-		elif direction == "r":
-			delX, delY = -1, 0
-		player_x, player_y = self.BImat_coords()
-		next_tile_x = player_x - delX
-		next_tile_y = player_y - delY
-		next_tile = Tile(BImat[next_tile_y][next_tile_x])
-		 
-		if not next_tile.stop:
-			self.move(direction, delX, delY)
-			new_tile_code = tile_hero_interaction(next_tile, self)
-			tile_x, tile_y = self.BImat_coords()
-			BImat[tile_y][tile_x] = new_tile_code
-		self.around_actions()
+		print(self.seed_coords())
+		if not paused:
+			if direction == "u":
+				delX, delY = 0, 1
+			elif direction == "l":
+				delX, delY = 1, 0,
+			elif direction == "d":
+				delX, delY = 0, -1
+			elif direction == "r":
+				delX, delY = -1, 0
+			player_x, player_y = self.BImat_coords()
+			next_tile_x = player_x - delX
+			next_tile_y = player_y - delY
+			next_tile = Tile(BImat[next_tile_y][next_tile_x])
+			 
+			if not next_tile.stop:
+				self.move(direction, delX, delY)
+				new_tile_code = tile_hero_interaction(next_tile, self)
+				tile_x, tile_y = self.BImat_coords()
+				BImat[tile_y][tile_x] = new_tile_code
+			self.around_actions()
 		
 
 	def move(self, direction, delX, delY):
@@ -305,6 +376,19 @@ class Explorer:
 
 #####Main#####
 #Function Definitions
+def execute_input(user_input):
+	global paused
+	global special_handler
+	if not special_handler:
+		if user_input == "check coins":
+			messages.append("You have " + str(hero.coins) + " coins")
+		elif user_input == "check apples":
+			messages.append("You have " + str(hero.apples) + " apples")
+	else:
+		special_handler(user_input)
+		paused = False
+		special_handler = None
+
 def move_key_manager(keys, move_ticker, hero):
 	#Hero Movement
 	if move_ticker:
@@ -352,6 +436,7 @@ def input_manager():
 	global user_input
 	draw_input(screen, user_input, execute_and_clear, opensans_font)
 	if execute_and_clear:
+		execute_input(user_input)
 		user_input = ""
 		execute_and_clear = False
 	
@@ -371,7 +456,7 @@ def game_loop(hero):
 			last_key = user_key_manager(key.get_pressed(), last_key, hero)
 		input_manager()
 		display.flip()
-		k+=1
+		k += 1
 
 #Calls
 hero = Explorer()
@@ -381,12 +466,9 @@ game_loop(hero)
 Feature Ideas
 -block patterns
 -refactoring
--wrap around map
+-neighbourhood around player start position (store, proffesor etc)
 -game objective
 -external rooms
--external communication/control (keyboard based)
--add interactive stops
-
 
 
 
