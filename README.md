@@ -4,7 +4,7 @@ In this Pokemon-style game, Tiler walks around endlessly, soothed only by the ma
 Future updates may reveal that Tiler's world is more interesting than he thinks.
 
 ## Example Game Screenshot
-![alt text](gameplay.png | width=100)
+![alt text](gameplay.png){:height="50%" width="50%"}
 
 
 Watch example game play by downloading the mp4 video, available here: https://github.com/SambhavS/tileman/blob/master/tileman.mp4
