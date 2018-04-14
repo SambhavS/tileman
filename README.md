@@ -7,4 +7,4 @@ Future updates may reveal that Tiler's world is more interesting than he thinks.
 ![alt text](gameplay.png)
 
 
-Watch example game play by downloading the mp4 video, available here: 
+Watch example game play by downloading the mp4 video, available here: https://github.com/SambhavS/tileman/blob/master/tileman.mp4
